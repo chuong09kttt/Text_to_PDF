@@ -1,104 +1,123 @@
 import os
+import math
 import tempfile
-from reportlab.lib.pagesizes import A4, A3, A2, A1, landscape, portrait
-from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A3, landscape
 from reportlab.lib.units import mm
-from PIL import Image
-import streamlit as st
+from reportlab.pdfgen import canvas
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout,
+    QTextEdit, QPushButton, QFileDialog, QMessageBox, QLabel
+)
+from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt
+import sys
 
-# ---------------- CONFIG ----------------
-PAPER_SIZES = {"A1": A1, "A2": A2, "A3": A3, "A4": A4}
 
-st.set_page_config(page_title="PDF Generator", page_icon="🧾", layout="centered")
+class PDFGenerator(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("PDF Creator - Premium Version")
+        self.setGeometry(200, 100, 950, 700)
+        self.setStyleSheet("""
+            QWidget {background-color: #20242c; color: white;}
+            QTextEdit {background-color: #2b2f38; color: #f8f8f2; border: 2px solid #444; border-radius: 10px; padding: 10px;}
+            QPushButton {
+                background-color: #0078d7; border: none; color: white;
+                padding: 10px 20px; border-radius: 8px; font-weight: bold;
+            }
+            QPushButton:hover {background-color: #005a9e;}
+            QLabel {color: #cccccc;}
+        """)
 
-# ---------------- UI ----------------
-st.markdown("<h2 style='text-align:center; color:#2196F3;'>🧾 PDF Generator</h2>", unsafe_allow_html=True)
-st.write("")
+        layout = QVBoxLayout()
+        self.label = QLabel("✏️ Nhập nội dung cần in ra PDF (mỗi dòng = 1 mục):")
+        self.label.setFont(QFont("Arial", 11))
+        layout.addWidget(self.label)
 
-paper_size = st.selectbox("Chọn khổ giấy:", list(PAPER_SIZES.keys()), index=3)
-orientation = st.radio("Hướng giấy:", ["Dọc (Portrait)", "Ngang (Landscape)"])
-text_color = st.color_picker("Màu chữ:", "#000000")
-bg_color = st.color_picker("Màu nền:", "#FFFFFF")
+        self.text_edit = QTextEdit()
+        self.text_edit.setFont(QFont("Consolas", 11))
+        layout.addWidget(self.text_edit)
 
-input_text = st.text_area("Nhập nội dung (mỗi dòng cách nhau 20mm):", height=250)
-uploaded_image = st.file_uploader("Tùy chọn: chèn ảnh (PNG/JPG)", type=["png", "jpg", "jpeg"])
+        self.button_layout = QHBoxLayout()
+        self.generate_button = QPushButton("📄 Generate PDF")
+        self.generate_button.clicked.connect(self.generate_pdf)
+        self.button_layout.addWidget(self.generate_button)
+        layout.addLayout(self.button_layout)
 
-# ---------------- PROCESS ----------------
-if st.button("🖨️ Generate PDF"):
-    if not input_text.strip():
-        st.error("❌ Vui lòng nhập nội dung trước khi tạo PDF.")
-    else:
-        # Kiểm tra dòng quá dài
-        lines = input_text.split("\n")
-        long_lines = [line for line in lines if len(line) > 100]
+        self.setLayout(layout)
+
+    def generate_pdf(self):
+        text = self.text_edit.toPlainText().strip()
+        if not text:
+            QMessageBox.warning(self, "Thiếu dữ liệu", "Vui lòng nhập nội dung trước khi tạo PDF.")
+            return
+
+        # Tách dòng
+        lines = text.split("\n")
+
+        # Kiểm tra độ dài từng dòng
+        long_lines = [line for line in lines if len(line) > 120]
         if long_lines:
-            st.error("❌ Một số dòng quá dài (>100 ký tự). Hãy xuống dòng hoặc rút ngắn lại.")
-        else:
-            # Tạo file tạm
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                pdf_path = tmp.name
+            QMessageBox.warning(
+                self, "Phát hiện lỗi",
+                f"Có {len(long_lines)} dòng vượt quá 120 ký tự:\n\n" +
+                "\n".join(f"- {l[:100]}..." for l in long_lines) +
+                "\n\nHãy rút ngắn lại để tránh tràn lề."
+            )
+            return
 
-            # Cấu hình PDF
-            page_size = PAPER_SIZES[paper_size]
-            if "Ngang" in orientation:
-                page_size = landscape(page_size)
-            else:
-                page_size = portrait(page_size)
+        # Chọn nơi lưu file
+        file_path, _ = QFileDialog.getSaveFileName(self, "Lưu PDF", "", "PDF Files (*.pdf)")
+        if not file_path:
+            return
 
-            c = canvas.Canvas(pdf_path, pagesize=page_size)
-            width, height = page_size
+        # Tạo PDF tạm thời
+        tmp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+        c = canvas.Canvas(tmp_pdf.name, pagesize=landscape(A3))
+        width, height = landscape(A3)
 
-            # Cấu hình lề
-            margin_left = 20 * mm
-            margin_top = 20 * mm
-            line_spacing = 20 * mm
+        # Cấu hình lề và font
+        top_margin = 20 * mm
+        left_margin = 20 * mm
+        line_height = 10 * mm
+        usable_height = height - 40 * mm  # trừ lề trên + dưới
+        lines_per_page = math.floor(usable_height / line_height)
 
-            # Vẽ nền
-            c.setFillColor(bg_color)
-            c.rect(0, 0, width, height, fill=True, stroke=False)
+        total_pages = math.ceil(len(lines) / lines_per_page)
+        c.setFont("Helvetica", 11)
 
-            # Vẽ chữ
-            c.setFont("Helvetica", 12)
-            c.setFillColor(text_color)
+        for i, line in enumerate(lines):
+            page_num = i // lines_per_page + 1
+            line_y = height - top_margin - ((i % lines_per_page) * line_height)
+            c.drawString(left_margin, line_y, line)
 
-            y = height - margin_top  # Dòng đầu tiên cách mép trên 20 mm
+            # Vẽ đường line dưới mỗi dòng
+            c.setStrokeColorRGB(0.3, 0.3, 0.3)
+            c.setLineWidth(0.3)
+            c.line(left_margin, line_y - 2, width - left_margin, line_y - 2)
 
-            for line in lines:
-                if y < margin_top:
-                    # Sang trang mới nếu hết chỗ
-                    c.showPage()
-                    c.setFillColor(bg_color)
-                    c.rect(0, 0, width, height, fill=True, stroke=False)
-                    c.setFont("Helvetica", 12)
-                    c.setFillColor(text_color)
-                    y = height - margin_top
+            # Khi hết trang, chuyển sang trang mới
+            if (i + 1) % lines_per_page == 0 and (i + 1) < len(lines):
+                # Thêm footer trang trước khi sang trang mới
+                footer = f"Page {page_num}/{total_pages} - A3 - NCC"
+                c.setFont("Helvetica-Oblique", 9)
+                c.drawRightString(width - left_margin, 15 * mm, footer)
+                c.showPage()
+                c.setFont("Helvetica", 11)
 
-                c.drawString(margin_left, y, line)
-                y -= line_spacing  # Giữ khoảng cách dòng đều 20 mm
+        # Footer cho trang cuối
+        footer = f"Page {total_pages}/{total_pages} - A3 - NCC"
+        c.setFont("Helvetica-Oblique", 9)
+        c.drawRightString(width - left_margin, 15 * mm, footer)
 
-            # Vẽ đường ngang chính giữa
-            mid_y = height / 2
-            c.setStrokeColor("#999999")
-            c.setLineWidth(0.8)
-            c.line(0, mid_y, width, mid_y)
+        c.save()
+        os.replace(tmp_pdf.name, file_path)
 
-            # Chèn ảnh nếu có
-            if uploaded_image:
-                img = Image.open(uploaded_image)
-                img_w, img_h = img.size
-                aspect = img_h / img_w
-                display_w = width / 3
-                display_h = display_w * aspect
-                img_x = width - display_w - 20 * mm
-                img_y = 20 * mm
-                temp_img = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-                img.save(temp_img.name)
-                c.drawImage(temp_img.name, img_x, img_y, display_w, display_h)
-                os.remove(temp_img.name)
+        QMessageBox.information(self, "✅ Thành công", f"Tạo PDF hoàn tất!\nĐã lưu tại:\n{file_path}")
 
-            c.save()
 
-            # Hiển thị nút tải PDF
-            st.success("✅ PDF đã tạo thành công!")
-            with open(pdf_path, "rb") as f:
-                st.download_button("💾 Tải PDF", f, file_name="output.pdf", mime="application/pdf")
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    win = PDFGenerator()
+    win.show()
+    sys.exit(app.exec())

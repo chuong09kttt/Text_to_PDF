@@ -126,68 +126,70 @@ def generate_pdf_from_images(lines, pdf_path):
     page_size = PAPER_SIZES[paper_choice]
     page_w, page_h = landscape(page_size) if orientation_choice == "Landscape" else portrait(page_size)
     c = canvas.Canvas(pdf_path, pagesize=(page_w, page_h))
-    line_spacing = 20 * mm
-    separator_y_gap = 10 * mm
-    y = page_h - 60 * mm
+
+    # --- Cấu hình khoảng cách ---
+    line_spacing = 20 * mm          # Khoảng cách giữa các dòng
+    separator_y_gap = 10 * mm       # Vị trí line ngang giữa dòng
+    top_margin = 60 * mm
+    side_margin = 20 * mm           # Căn trái sát viền hơn
+    border_margin = 2 * mm          # Viền đỏ cách mép giấy 2mm
+    footer_y = 15 * mm
+
+    # --- Ước lượng số dòng mỗi trang ---
+    lines_per_page = int((page_h - top_margin - 80 * mm) / (line_spacing + separator_y_gap))
+    total_pages = math.ceil(len(lines) / lines_per_page)
     page_number = 1
 
-    for line in lines:
-        x = 40 * mm
-        # Tính tổng chiều rộng dòng để căn giữa
-        total_width = 0
-        for ch in line:
-            if ch == " ":
-                total_width += 10 * mm
-            else:
-                img_path = None
-                for candidate in [f"{ch.upper()}.png", f"{ch.lower()}.png"]:
-                    p = os.path.join(LETTERS_FOLDER, candidate)
-                    if os.path.exists(p):
-                        img_path = p
-                        break
-                if img_path:
-                    with Image.open(img_path) as img:
-                        w, h = img.size
-                        total_width += (letter_height_mm * mm) * (w / h)
-        start_x = (page_w - total_width) / 2  # căn giữa
-        x = start_x
+    # --- Bắt đầu vẽ ---
+    y = page_h - top_margin
+    for i, line in enumerate(lines, start=1):
+        x = side_margin  # căn trái 20mm
 
         # Vẽ từng ký tự
         for ch in line:
             if ch == " ":
                 x += 10 * mm
                 continue
-            img_path = None
             for candidate in [f"{ch.upper()}.png", f"{ch.lower()}.png"]:
-                p = os.path.join(LETTERS_FOLDER, candidate)
-                if os.path.exists(p):
-                    img_path = p
+                img_path = os.path.join(LETTERS_FOLDER, candidate)
+                if os.path.exists(img_path):
+                    with Image.open(img_path) as img:
+                        w, h = img.size
+                        aspect = w / h
+                        draw_h = letter_height_mm * mm
+                        draw_w = draw_h * aspect
+                        c.drawImage(img_path, x, y - draw_h, width=draw_w, height=draw_h, mask='auto')
+                        x += draw_w
                     break
-            if img_path:
-                with Image.open(img_path) as img:
-                    w, h = img.size
-                    aspect = w / h
-                    draw_h = letter_height_mm * mm
-                    draw_w = draw_h * aspect
-                    c.drawImage(img_path, x, y - draw_h, width=draw_w, height=draw_h, mask='auto')
-                    x += draw_w
 
-        # Vẽ line giữa các dòng
-        y -= (line_spacing + separator_y_gap)
+        # --- Vẽ line ngang giữa các dòng ---
+        line_y = y - separator_y_gap
         c.setLineWidth(0.5)
-        c.line(40 * mm, y + separator_y_gap, page_w - 40 * mm, y + separator_y_gap)
-        y -= separator_y_gap
+        c.setStrokeColorRGB(0, 0, 0)
+        c.line(side_margin, line_y, page_w - side_margin, line_y)
 
-        if y < 80 * mm:
+        # --- Giảm y cho dòng tiếp theo ---
+        y -= (line_spacing + separator_y_gap)
+
+        # --- Khi hết trang ---
+        if (i % lines_per_page == 0) or (i == len(lines)):
+            # Viền đỏ quanh trang
+            c.setStrokeColorRGB(1, 0, 0)
+            c.setLineWidth(1)
+            c.rect(border_margin, border_margin, page_w - 2*border_margin, page_h - 2*border_margin)
+
+            # Footer căn giữa
             c.setFont("Helvetica", 10)
-            c.drawString(50 * mm, 20 * mm, f"Page {page_number} - {paper_choice} - NCC")
-            c.showPage()
-            y = page_h - 60 * mm
-            page_number += 1
+            footer_text = f"Page {page_number}/{total_pages} - {paper_choice} - NCC"
+            text_width = c.stringWidth(footer_text, "Helvetica", 10)
+            c.drawString((page_w - text_width) / 2, footer_y, footer_text)
 
-    # Footer cuối trang
-    c.setFont("Helvetica", 10)
-    c.drawString(50 * mm, 20 * mm, f"Page {page_number} - {paper_choice} - NCC")
+            # Chuyển trang
+            if i != len(lines):
+                c.showPage()
+                y = page_h - top_margin
+                page_number += 1
+
     c.save()
 
 # ---------------- BUTTON ----------------

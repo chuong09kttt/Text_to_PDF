@@ -6,43 +6,41 @@ from reportlab.lib.units import mm
 from PIL import Image
 import tempfile
 import base64
-import shutil
-import streamlit.components.v1 as components
 
 # -------------------
 # Config
 # -------------------
-st.set_page_config(page_title="Text to PDF", layout="wide")
 PAPER_SIZES = {"A1": A1, "A2": A2, "A3": A3, "A4": A4}
-LETTER_HEIGHT_OPTIONS = [50, 75, 100, 150]
+DEFAULT_PAPER = "A3"
+DEFAULT_ORIENTATION = "Landscape"
+DEFAULT_LETTER_HEIGHT = 100  # mm
 
-ABC_FOLDER = os.path.join(os.path.dirname(__file__), "ABC")
-os.makedirs(ABC_FOLDER, exist_ok=True)  # Tạo folder nếu chưa có
+# Thư mục chứa PNG chữ cái
+LETTERS_FOLDER = os.path.join(os.path.dirname(__file__), "ABC")
+if not os.path.exists(LETTERS_FOLDER):
+    os.makedirs(LETTERS_FOLDER)
 
 # -------------------
 # Sidebar / Controls
 # -------------------
 st.sidebar.title("Settings")
-paper_choice = st.sidebar.selectbox("Paper size", list(PAPER_SIZES.keys()), index=2)
-orientation_choice = st.sidebar.selectbox("Orientation", ["Portrait", "Landscape"], index=1)
-letter_height_mm = st.sidebar.selectbox("Letter height (mm)", LETTER_HEIGHT_OPTIONS, index=2)
+paper_choice = st.sidebar.selectbox("Paper size", list(PAPER_SIZES.keys()), index=list(PAPER_SIZES.keys()).index(DEFAULT_PAPER))
+orientation_choice = st.sidebar.selectbox("Orientation", ["Portrait", "Landscape"], index=["Portrait","Landscape"].index(DEFAULT_ORIENTATION))
+letter_height_mm = st.sidebar.selectbox("Letter height (mm)", [50, 75, 100, 150], index=[50, 75, 100, 150].index(DEFAULT_LETTER_HEIGHT))
 letter_height = letter_height_mm * mm
 
 # -------------------
 # Admin upload PNG letters
 # -------------------
-st.sidebar.subheader("Admin Upload Letters (PNG)")
-uploaded_files = st.sidebar.file_uploader(
-    "Upload PNG letters",
-    type=["png"],
-    accept_multiple_files=True
-)
+st.sidebar.markdown("---")
+st.sidebar.subheader("Admin: Upload PNG letters")
+uploaded_files = st.sidebar.file_uploader("Upload PNG letters", type=["png"], accept_multiple_files=True)
 if uploaded_files:
-    for file in uploaded_files:
-        dest_path = os.path.join(ABC_FOLDER, file.name.upper())
-        with open(dest_path, "wb") as f:
-            f.write(file.getbuffer())
-    st.sidebar.success(f"{len(uploaded_files)} files uploaded to ABC folder.")
+    for uploaded_file in uploaded_files:
+        save_path = os.path.join(LETTERS_FOLDER, uploaded_file.name)
+        with open(save_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+    st.sidebar.success("Uploaded successfully!")
 
 # -------------------
 # Text input
@@ -53,24 +51,33 @@ text_input = st.text_area("Enter lines of text:", height=300, placeholder="Line 
 # -------------------
 # Helper functions
 # -------------------
+def get_existing_letter_file(ch):
+    """Return path to PNG file for character ch, case-insensitive, any .png/.PNG"""
+    for ext in [".png", ".PNG"]:
+        upper_path = os.path.join(LETTERS_FOLDER, f"{ch.upper()}{ext}")
+        lower_path = os.path.join(LETTERS_FOLDER, f"{ch.lower()}{ext}")
+        if os.path.exists(upper_path):
+            return upper_path
+        if os.path.exists(lower_path):
+            return lower_path
+    return None
+
 def check_missing_chars(lines):
     missing_chars = set()
     for line in lines:
-        for ch in line.upper():
-            if ch != " ":
-                img_path = os.path.join(ABC_FOLDER, f"{ch}.PNG")
-                if not os.path.exists(img_path):
-                    missing_chars.add(ch)
+        for ch in line:
+            if ch != " " and not get_existing_letter_file(ch):
+                missing_chars.add(ch)
     return missing_chars
 
 def check_line_width(line, page_w, margin_x=20*mm, space_width=15*mm):
     x = margin_x
-    for ch in line.upper():
+    for ch in line:
         if ch == " ":
             x += space_width
             continue
-        img_path = os.path.join(ABC_FOLDER, f"{ch}.PNG")
-        if os.path.exists(img_path):
+        img_path = get_existing_letter_file(ch)
+        if img_path:
             try:
                 with Image.open(img_path) as im:
                     w, h = im.size
@@ -96,10 +103,10 @@ def generate_pdf(lines, pdf_path):
 
     # Preload char dimensions
     char_dimensions = {}
-    unique_chars = set("".join(lines).upper().replace(" ", ""))
+    unique_chars = set("".join(lines).replace(" ",""))
     for ch in unique_chars:
-        img_path = os.path.join(ABC_FOLDER, f"{ch}.PNG")
-        if os.path.exists(img_path):
+        img_path = get_existing_letter_file(ch)
+        if img_path:
             with Image.open(img_path) as im:
                 char_dimensions[ch] = im.size
 
@@ -113,61 +120,44 @@ def generate_pdf(lines, pdf_path):
             current_y = page_h - margin_y - letter_height
             page_num +=1
 
+        # Red border 2mm
+        c.setStrokeColorRGB(1,0,0)
+        c.setLineWidth(2)
+        c.rect(2*mm, 2*mm, page_w-4*mm, page_h-4*mm)
+
+        # 1 line top & bottom 10mm
+        c.setStrokeColorRGB(0,0,0)
+        c.setLineWidth(0.5)
+        c.line(margin_x, current_y + letter_height + 10*mm, page_w - margin_x, current_y + letter_height + 10*mm)
+        c.line(margin_x, current_y - 10*mm, page_w - margin_x, current_y - 10*mm)
+
         # Draw letters
         x = margin_x
-        for ch in line.upper():
+        for ch in line:
             if ch == " ":
                 x += 15*mm
                 continue
-            img_path = os.path.join(ABC_FOLDER, f"{ch}.PNG")
-            if os.path.exists(img_path):
-                w, h = char_dimensions[ch]
+            img_path = get_existing_letter_file(ch)
+            if img_path:
+                w, h = char_dimensions.get(ch, (letter_height, letter_height))
                 letter_width = letter_height * w / h
                 c.drawImage(img_path, x, current_y, width=letter_width, height=letter_height, mask='auto')
                 x += letter_width + 5*mm
             else:
                 x += 50*mm
 
+        # Footer
+        c.setFont("Helvetica", 10)
+        footer_text = f"Page {page_num}/{total_pages} - {paper_choice} - NCC"
+        c.drawCentredString(page_w/2, 5*mm, footer_text)
+
         current_y -= (letter_height + line_spacing)
 
     c.save()
 
-def display_pdf_with_pdfjs(pdf_path):
+def pdf_to_bytes(pdf_path):
     with open(pdf_path, "rb") as f:
-        pdf_b64 = base64.b64encode(f.read()).decode("utf-8")
-    
-    html_code = f"""
-    <html>
-      <head>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.547/pdf.min.js"></script>
-        <style>
-          #pdf-canvas {{ width: 100%; height: 700px; border: 1px solid #000; }}
-        </style>
-      </head>
-      <body>
-        <canvas id="pdf-canvas"></canvas>
-        <script>
-          const pdfData = atob("{pdf_b64}");
-          const pdfjsLib = window['pdfjs-dist/build/pdf'];
-          pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.547/pdf.worker.min.js';
-          const loadingTask = pdfjsLib.getDocument({{data: pdfData}});
-          loadingTask.promise.then(pdf => {{
-              let pageNum = 1;
-              pdf.getPage(pageNum).then(page => {{
-                  const scale = 1.5;
-                  const viewport = page.getViewport({{scale: scale}});
-                  const canvas = document.getElementById('pdf-canvas');
-                  const context = canvas.getContext('2d');
-                  canvas.height = viewport.height;
-                  canvas.width = viewport.width;
-                  page.render({{canvasContext: context, viewport: viewport}});
-              }});
-          }});
-        </script>
-      </body>
-    </html>
-    """
-    components.html(html_code, height=750)
+        return f.read()
 
 # -------------------
 # Generate & Preview
@@ -177,7 +167,11 @@ if st.button("Generate PDF"):
     if not lines:
         st.warning("Please enter at least one line.")
     else:
+        long_lines = [i+1 for i, line in enumerate(lines) if check_line_width(line, PAPER_SIZES[paper_choice][0])]
         missing_chars = check_missing_chars(lines)
+
+        if long_lines:
+            st.warning(f"Lines too long: {long_lines}")
         if missing_chars:
             st.warning(f"Missing PNG letters: {', '.join(sorted(missing_chars))}")
 
@@ -188,9 +182,19 @@ if st.button("Generate PDF"):
         generate_pdf(lines, tmp_path)
         st.success("PDF generated!")
 
-        # Preview with PDF.js
-        display_pdf_with_pdfjs(tmp_path)
+        # Preview PDF using PDF.js iframe
+        pdf_bytes = pdf_to_bytes(tmp_path)
+        pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
+        pdf_display = f"""
+        <iframe
+            src="https://mozilla.github.io/pdf.js/web/viewer.html?file=data:application/pdf;base64,{pdf_b64}"
+            width="100%"
+            height="600"
+            style="border: none;"
+        ></iframe>
+        """
+        st.markdown(pdf_display, unsafe_allow_html=True)
 
-        # Download
+        # Download button
         with open(tmp_path, "rb") as f:
-            st.download_button("Download PDF", f, file_name="output.pdf")
+            st.download_button("Download PDF", f, file_name="output.pdf", mime="application/pdf")

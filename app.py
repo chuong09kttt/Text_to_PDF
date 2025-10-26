@@ -6,7 +6,6 @@ from reportlab.lib.units import mm
 from PIL import Image
 import tempfile
 import base64
-from pdf2image import convert_from_path
 
 # -------------------
 # Config
@@ -144,10 +143,10 @@ def generate_pdf(lines, pdf_path):
 
     c.save()
 
-def pdf_preview_images(pdf_path):
-    # Convert PDF to images for preview
-    images = convert_from_path(pdf_path)
-    return images
+def pdf_to_base64(pdf_path):
+    with open(pdf_path, "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode("utf-8")
 
 # -------------------
 # Generate & Preview
@@ -168,15 +167,18 @@ if st.button("Generate PDF"):
         generate_pdf(lines, tmp_path)
         st.success("PDF generated!")
 
-        # Preview PDF as images with zoom slider
-        scale = st.slider("Zoom", 50, 200, 100)
-        images = pdf_preview_images(tmp_path)
-        for img in images:
-            w, h = img.size
-            new_w = int(w * scale / 100)
-            new_h = int(h * scale / 100)
-            img_resized = img.resize((new_w, new_h))
-            st.image(img_resized, use_column_width=True)
+        # Preview PDF (Adobe Reader-like) in iframe
+        pdf_b64 = pdf_to_base64(tmp_path)
+        pdf_display = f"""
+        <iframe
+            src="data:application/pdf;base64,{pdf_b64}"
+            width="100%"
+            height="800"
+            style="border:1px solid #666"
+            allowfullscreen
+        ></iframe>
+        """
+        st.markdown(pdf_display, unsafe_allow_html=True)
 
         # Download PDF
         with open(tmp_path, "rb") as f:

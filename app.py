@@ -1,197 +1,110 @@
 import os
-import streamlit as st
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A1, A2, A3, A4, landscape, portrait
-from reportlab.lib.units import mm
-from PIL import Image
-import tempfile
 import math
+import tempfile
+from PIL import Image
+from reportlab.lib.pagesizes import A4, A3, A2, A1, landscape, portrait
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import mm
+import streamlit as st
 
 # ---------------- CONFIG ----------------
-PAPER_SIZES = {"A1": A1, "A2": A2, "A3": A3, "A4": A4}
-LETTER_HEIGHT_OPTIONS = [50, 75, 100, 150]
-ADMIN_PASSWORD = "admin123"
+PAPER_SIZES = {
+    "A1": A1, "A2": A2, "A3": A3, "A4": A4
+}
 
-st.set_page_config(page_title="Smart Text to PDF", layout="wide", page_icon="📄")
+st.set_page_config(page_title="PDF Generator", page_icon="🧾", layout="centered")
 
-# ---------------- CSS ----------------
-st.markdown("""
-<style>
-[data-testid="stAppViewContainer"] {
-    background: linear-gradient(135deg, #2b5876 0%, #4e4376 100%);
-}
-[data-testid="stSidebar"] > div:first-child {
-    background: linear-gradient(180deg, #141E30 0%, #243B55 100%);
-}
-.main-header {
-    color: white; text-align: center; font-weight: 700; font-size: 2.6rem;
-    margin-bottom: 2rem; text-shadow: 0px 2px 8px rgba(0,0,0,0.4);
-}
-.content-card {
-    background: rgba(255,255,255,0.98);
-    border-radius: 20px; padding: 2rem;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.2);
-}
-.error-line {
-    background-color: #ffcccc;
-    border-radius: 6px;
-    padding: 3px 6px;
-}
-.success-msg {
-    background: #e8ffe8;
-    padding: 10px;
-    border-radius: 10px;
-    color: #006600;
-    font-weight: 600;
-}
-.char-count {
-    color: #888;
-    font-size: 13px;
-}
-</style>
-""", unsafe_allow_html=True)
+# ---------------- UI ----------------
+st.markdown(
+    """
+    <h2 style='text-align:center; color:#1E88E5;'>📄 PDF Generator Tool</h2>
+    """, unsafe_allow_html=True
+)
 
-# ---------------- SIDEBAR ----------------
-with st.sidebar:
-    st.markdown("<h2 style='color:white; text-align:center;'>⚙️ Settings</h2>", unsafe_allow_html=True)
-    paper_choice = st.selectbox("📄 Paper size", list(PAPER_SIZES.keys()), index=2)  # Default A3
-    orientation_choice = st.selectbox("🔄 Orientation", ["Landscape", "Portrait"], index=1)
-    letter_height_mm = st.selectbox("📏 Letter height (mm)", LETTER_HEIGHT_OPTIONS, index=2)
+paper_size = st.selectbox("Chọn khổ giấy:", list(PAPER_SIZES.keys()), index=3)
+orientation = st.radio("Hướng giấy:", ["Dọc (Portrait)", "Ngang (Landscape)"])
+text_color = st.color_picker("Màu chữ:", "#000000")
+bg_color = st.color_picker("Màu nền:", "#FFFFFF")
 
-    st.markdown("---")
-    st.markdown("<h3 style='color:white;'>🔒 Admin Panel</h3>", unsafe_allow_html=True)
-    password = st.text_input("Enter admin password", type="password")
+st.write("---")
 
-    if password == ADMIN_PASSWORD:
-        uploaded_files = st.file_uploader("📤 Upload PNG letters", type=["png"], accept_multiple_files=True)
-        if uploaded_files:
-            LETTERS_FOLDER = os.path.join(os.path.dirname(__file__), "ABC")
-            os.makedirs(LETTERS_FOLDER, exist_ok=True)
-            for file in uploaded_files:
-                with open(os.path.join(LETTERS_FOLDER, file.name), "wb") as f:
-                    f.write(file.getbuffer())
-            st.success(f"✅ {len(uploaded_files)} files uploaded successfully!")
+input_text = st.text_area("Nhập nội dung (mỗi dòng sẽ cách nhau 20mm):", height=250)
+
+uploaded_image = st.file_uploader("Tùy chọn: Chèn hình ảnh (PNG/JPG)", type=["png", "jpg", "jpeg"])
+
+# ---------------- VALIDATION ----------------
+if st.button("🖨️ Generate PDF"):
+    if not input_text.strip():
+        st.error("❌ Vui lòng nhập nội dung trước khi tạo PDF.")
     else:
-        LETTERS_FOLDER = os.path.join(os.path.dirname(__file__), "ABC")
-        if not os.path.exists(LETTERS_FOLDER):
-            st.error("📁 Letter folder not found. Please contact administrator.")
+        lines = input_text.split("\n")
+        too_long_lines = [line for line in lines if len(line) > 100]
 
-# ---------------- MAIN UI ----------------
-st.markdown("<h1 class='main-header'>🧠 Smart Text-to-PDF Converter</h1>", unsafe_allow_html=True)
-st.markdown("<div class='content-card'>", unsafe_allow_html=True)
-st.markdown("### ✍️ Enter Your Text")
+        if too_long_lines:
+            st.error("❌ Một số dòng quá dài (>100 ký tự). Hãy xuống dòng hoặc rút ngắn lại.")
+        else:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                pdf_path = tmp_file.name
 
-text_input = st.text_area("", height=300, placeholder="Enter your text here...")
+            # Tạo PDF
+            page_size = PAPER_SIZES[paper_size]
+            if "Ngang" in orientation:
+                page_size = landscape(page_size)
+            else:
+                page_size = portrait(page_size)
 
-# ---------------- UTILS ----------------
-def get_missing_chars(lines):
-    missing = set()
-    for line in lines:
-        for ch in line:
-            if ch != " ":
-                found = any(os.path.exists(os.path.join(LETTERS_FOLDER, f))
-                            for f in [f"{ch.upper()}.png", f"{ch.lower()}.png"])
-                if not found:
-                    missing.add(ch)
-    return missing
+            c = canvas.Canvas(pdf_path, pagesize=page_size)
 
-def estimate_max_chars(page_size, orientation, letter_height_mm):
-    page_w, _ = landscape(page_size) if orientation == "Landscape" else portrait(page_size)
-    usable_width = page_w - 60 * mm
-    avg_char_width = (letter_height_mm * 0.7) * mm
-    return math.floor(usable_width / avg_char_width)
+            width, height = page_size
+            margin_left = 20 * mm
+            top_margin = 20 * mm
+            line_spacing = 20 * mm
 
-# ---------------- PDF GENERATOR ----------------
-def generate_pdf_from_images(lines, pdf_path):
-    page_size = PAPER_SIZES[paper_choice]
-    page_w, page_h = landscape(page_size) if orientation_choice == "Landscape" else portrait(page_size)
-    c = canvas.Canvas(pdf_path, pagesize=(page_w, page_h))
+            # Nền
+            c.setFillColor(bg_color)
+            c.rect(0, 0, width, height, fill=True, stroke=False)
 
-    # --- Cấu hình ---
-    top_margin = 20 * mm
-    side_margin = 20 * mm
-    border_margin = 2 * mm
-    footer_y = 15 * mm
-    line_gap = 20 * mm
-    line_height = letter_height_mm * mm
-    separator_pos = line_gap / 2
+            # Màu chữ
+            c.setFillColor(text_color)
+            c.setFont("Helvetica", 12)
 
-    usable_height = page_h - top_margin - 60 * mm
-    lines_per_page = int(usable_height // line_gap)
-    total_pages = math.ceil(len(lines) / lines_per_page)
-    page_number = 1
-    y = page_h - top_margin
+            # Dòng đầu tiên cách mép trên 20mm
+            y = height - top_margin
 
-    for i, line in enumerate(lines, start=1):
-        x = side_margin
-        for ch in line:
-            if ch == " ":
-                x += 8 * mm
-                continue
-            for candidate in [f"{ch.upper()}.png", f"{ch.lower()}.png"]:
-                img_path = os.path.join(LETTERS_FOLDER, candidate)
-                if os.path.exists(img_path):
-                    with Image.open(img_path) as img:
-                        w, h = img.size
-                        aspect = w / h
-                        draw_h = line_height
-                        draw_w = draw_h * aspect
-                        c.drawImage(img_path, x, y - draw_h, width=draw_w, height=draw_h, mask='auto')
-                        x += draw_w
-                    break
+            for line in lines:
+                if y < 20 * mm:
+                    c.showPage()
+                    c.setFillColor(bg_color)
+                    c.rect(0, 0, width, height, fill=True, stroke=False)
+                    c.setFillColor(text_color)
+                    c.setFont("Helvetica", 12)
+                    y = height - top_margin
 
-        # --- Vẽ line giữa các dòng ---
-        mid_y = y - separator_pos
-        c.setStrokeColorRGB(0, 0, 0)
-        c.setLineWidth(0.5)
-        c.line(side_margin, mid_y, page_w - side_margin, mid_y)
+                c.drawString(margin_left, y, line)
+                y -= line_spacing  # Cách đều 20mm giữa các dòng
 
-        # --- Dòng tiếp theo ---
-        y -= line_gap
+            # Đường ngang chính giữa trang
+            middle_y = height / 2
+            c.setStrokeColor("#999999")
+            c.setLineWidth(0.5)
+            c.line(0, middle_y, width, middle_y)
 
-        # --- Khi hết trang hoặc hết dữ liệu ---
-        if (i % lines_per_page == 0) or (i == len(lines)):
-            # Viền đỏ
-            c.setStrokeColorRGB(1, 0, 0)
-            c.setLineWidth(1)
-            c.rect(border_margin, border_margin, page_w - 2 * border_margin, page_h - 2 * border_margin)
+            # Hình ảnh (nếu có)
+            if uploaded_image:
+                image = Image.open(uploaded_image)
+                img_width, img_height = image.size
+                aspect = img_height / img_width
+                display_width = width / 3
+                display_height = display_width * aspect
+                img_x = width - display_width - 20 * mm
+                img_y = 20 * mm
+                image_path = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
+                image.save(image_path)
+                c.drawImage(image_path, img_x, img_y, display_width, display_height)
+                os.remove(image_path)
 
-            # Footer
-            c.setFont("Helvetica", 10)
-            footer_text = f"Page {page_number}/{total_pages} - {paper_choice} - NCC"
-            text_width = c.stringWidth(footer_text, "Helvetica", 10)
-            c.drawString((page_w - text_width) / 2, footer_y, footer_text)
+            c.save()
 
-            # Trang mới
-            if i != len(lines):
-                c.showPage()
-                y = page_h - top_margin
-                page_number += 1
-
-    c.save()
-
-# ---------------- BUTTON ----------------
-col1, col2, col3 = st.columns([1, 2, 1])
-with col2:
-    if st.button("📥 Generate PDF", use_container_width=True):
-        if not text_input.strip():
-            st.error("⚠️ Please enter text.")
-            st.stop()
-
-        lines = [l.rstrip() for l in text_input.splitlines() if l.strip()]
-        missing = get_missing_chars(lines)
-        if missing:
-            st.error(f"⚠️ Missing images for: {', '.join(sorted(missing))}")
-            st.stop()
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
-            pdf_path = tmp_pdf.name
-        try:
-            generate_pdf_from_images(lines, pdf_path)
+            st.success("✅ PDF đã được tạo thành công!")
             with open(pdf_path, "rb") as f:
-                pdf_data = f.read()
-            st.markdown("<div class='success-msg'>✅ PDF generated successfully!</div>", unsafe_allow_html=True)
-            st.download_button("💾 Save PDF", pdf_data, file_name="output.pdf", mime="application/pdf")
-        finally:
-            if os.path.exists(pdf_path):
-                os.unlink(pdf_path)
+                st.download_button("💾 Lưu PDF", f, file_name="output.pdf", mime="application/pdf")

@@ -5,64 +5,55 @@ from reportlab.lib.pagesizes import A1, A2, A3, A4, landscape, portrait
 from reportlab.lib.units import mm
 from PIL import Image
 import tempfile
-import base64
-import shutil
+from stpdf import st_display_pdf
 
 # -------------------
 # Config
 # -------------------
+st.set_page_config(page_title="Text to PDF", layout="wide")
+st.title("Text to PDF Generator")
+
 PAPER_SIZES = {"A1": A1, "A2": A2, "A3": A3, "A4": A4}
-LETTER_HEIGHT_OPTIONS = [50, 75, 100, 150]  # mm
-
-# Folder chứa PNG letters
 LETTERS_FOLDER = os.path.join(os.path.dirname(__file__), "ABC")
-os.makedirs(LETTERS_FOLDER, exist_ok=True)
+if not os.path.exists(LETTERS_FOLDER):
+    os.makedirs(LETTERS_FOLDER)
 
 # -------------------
-# Admin login
+# Admin upload PNG letters
 # -------------------
-st.sidebar.title("Admin Settings")
-admin_password = st.sidebar.text_input("Admin password", type="password")
-is_admin = admin_password == "admin123"  # bạn có thể thay đổi mật khẩu
+st.sidebar.header("Admin Upload Letters")
+uploaded_files = st.sidebar.file_uploader("Upload PNG letters (admin only)", type="png", accept_multiple_files=True)
+if uploaded_files:
+    for file in uploaded_files:
+        save_path = os.path.join(LETTERS_FOLDER, file.name.upper())
+        with open(save_path, "wb") as f:
+            f.write(file.getbuffer())
+    st.sidebar.success(f"Uploaded {len(uploaded_files)} letters.")
 
 # -------------------
-# Paper & letter settings
+# Settings
 # -------------------
-st.sidebar.title("PDF Settings")
+st.sidebar.header("Settings")
 paper_choice = st.sidebar.selectbox("Paper size", list(PAPER_SIZES.keys()), index=2)
-orientation_choice = st.sidebar.selectbox("Orientation", ["Landscape", "Portrait"], index=0)
-letter_height_mm = st.sidebar.selectbox("Letter height (mm)", LETTER_HEIGHT_OPTIONS, index=2)
+orientation_choice = st.sidebar.selectbox("Orientation", ["Portrait", "Landscape"], index=1)
+letter_height_mm = st.sidebar.selectbox("Letter height (mm)", [50, 75, 100, 150], index=2)
 letter_height = letter_height_mm * mm
 
 # -------------------
-# Admin upload PNG
+# Text input
 # -------------------
-if is_admin:
-    st.sidebar.subheader("Upload PNG letters (Admin only)")
-    uploaded_files = st.sidebar.file_uploader("Choose PNG files", type="png", accept_multiple_files=True)
-    if uploaded_files:
-        for file in uploaded_files:
-            dest_path = os.path.join(LETTERS_FOLDER, file.name)
-            with open(dest_path, "wb") as f:
-                f.write(file.getbuffer())
-        st.sidebar.success(f"{len(uploaded_files)} files uploaded successfully!")
+text_input = st.text_area("Enter lines of text:", height=250, placeholder="Line 1\nLine 2\nLine 3...")
 
 # -------------------
 # Helper functions
 # -------------------
-def get_letter_file(ch):
-    """Return full path to PNG file for letter ch, case-insensitive."""
-    for f in os.listdir(LETTERS_FOLDER):
-        if f.upper() == f"{ch}.PNG":
-            return os.path.join(LETTERS_FOLDER, f)
-    return None
-
 def check_missing_chars(lines):
     missing_chars = set()
     for line in lines:
         for ch in line.upper():
             if ch != " ":
-                if not get_letter_file(ch):
+                img_path = os.path.join(LETTERS_FOLDER, f"{ch}.PNG")
+                if not os.path.exists(img_path):
                     missing_chars.add(ch)
     return missing_chars
 
@@ -72,8 +63,8 @@ def check_line_width(line, page_w, margin_x=20*mm, space_width=15*mm):
         if ch == " ":
             x += space_width
             continue
-        img_path = get_letter_file(ch)
-        if img_path:
+        img_path = os.path.join(LETTERS_FOLDER, f"{ch}.PNG")
+        if os.path.exists(img_path):
             with Image.open(img_path) as im:
                 w, h = im.size
                 x += letter_height * (w/h) + 5*mm
@@ -89,8 +80,7 @@ def generate_pdf(lines, pdf_path):
         page_w, page_h = portrait(page_size)
 
     c = canvas.Canvas(pdf_path, pagesize=(page_w, page_h))
-    margin_x = 20*mm
-    margin_y = 10*mm
+    margin_x, margin_y = 20*mm, 10*mm
     line_spacing = 20*mm
     current_y = page_h - margin_y - letter_height
 
@@ -98,8 +88,8 @@ def generate_pdf(lines, pdf_path):
     char_dimensions = {}
     unique_chars = set("".join(lines).upper().replace(" ", ""))
     for ch in unique_chars:
-        img_path = get_letter_file(ch)
-        if img_path:
+        img_path = os.path.join(LETTERS_FOLDER, f"{ch}.PNG")
+        if os.path.exists(img_path):
             with Image.open(img_path) as im:
                 char_dimensions[ch] = im.size
 
@@ -113,25 +103,14 @@ def generate_pdf(lines, pdf_path):
             current_y = page_h - margin_y - letter_height
             page_num +=1
 
-        # Red border 2mm
-        c.setStrokeColorRGB(1,0,0)
-        c.setLineWidth(2)
-        c.rect(2*mm, 2*mm, page_w-4*mm, page_h-4*mm)
-
-        # Line guides
-        c.setStrokeColorRGB(0,0,0)
-        c.setLineWidth(0.5)
-        c.line(margin_x, current_y + letter_height + 10*mm, page_w - margin_x, current_y + letter_height + 10*mm)
-        c.line(margin_x, current_y - 10*mm, page_w - margin_x, current_y - 10*mm)
-
         # Draw letters
         x = margin_x
         for ch in line.upper():
             if ch == " ":
                 x += 15*mm
                 continue
-            img_path = get_letter_file(ch)
-            if img_path:
+            img_path = os.path.join(LETTERS_FOLDER, f"{ch}.PNG")
+            if os.path.exists(img_path):
                 w, h = char_dimensions[ch]
                 letter_width = letter_height * w / h
                 c.drawImage(img_path, x, current_y, width=letter_width, height=letter_height, mask='auto')
@@ -141,23 +120,11 @@ def generate_pdf(lines, pdf_path):
 
         # Footer
         c.setFont("Helvetica", 10)
-        footer_text = f"Page {page_num}/{total_pages} - {paper_choice} - NCC"
+        footer_text = f"Page {page_num}/{total_pages} - {paper_choice}"
         c.drawCentredString(page_w/2, 5*mm, footer_text)
-
         current_y -= (letter_height + line_spacing)
 
     c.save()
-
-def pdf_to_base64(pdf_path):
-    with open(pdf_path, "rb") as f:
-        data = f.read()
-    return base64.b64encode(data).decode("utf-8")
-
-# -------------------
-# Text input
-# -------------------
-st.header("Text to PDF")
-text_input = st.text_area("Enter lines of text:", height=300, placeholder="Line 1\nLine 2\nLine 3...")
 
 # -------------------
 # Generate PDF
@@ -168,12 +135,8 @@ if st.button("Generate PDF"):
         st.warning("Please enter at least one line.")
     else:
         missing_chars = check_missing_chars(lines)
-        long_lines = [i+1 for i, line in enumerate(lines) if check_line_width(line, PAPER_SIZES[paper_choice][0])]
-
         if missing_chars:
-            st.error(f"Missing PNG letters: {', '.join(sorted(missing_chars))}")
-        if long_lines:
-            st.warning(f"Lines too long for page width: {long_lines}")
+            st.warning(f"Missing PNG letters: {', '.join(sorted(missing_chars))}")
 
         tmp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
         tmp_path = tmp_pdf.name
@@ -183,12 +146,9 @@ if st.button("Generate PDF"):
         st.success("PDF generated!")
 
         # Preview PDF
-        pdf_b64 = pdf_to_base64(tmp_path)
-        pdf_display = f'''
-        <iframe src="data:application/pdf;base64,{pdf_b64}" width="100%" height="800" style="border:1px solid #888"></iframe>
-        '''
-        st.markdown(pdf_display, unsafe_allow_html=True)
+        with open(tmp_path, "rb") as f:
+            st_display_pdf(f.read())
 
-        # Download
+        # Download PDF
         with open(tmp_path, "rb") as f:
             st.download_button("Download PDF", f, file_name="output.pdf")

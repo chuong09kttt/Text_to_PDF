@@ -1,123 +1,135 @@
 import os
 import math
 import tempfile
-from reportlab.lib.pagesizes import A3, landscape
-from reportlab.lib.units import mm
+from PIL import Image
 from reportlab.pdfgen import canvas
-from PyQt6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout,
-    QTextEdit, QPushButton, QFileDialog, QMessageBox, QLabel
-)
-from PyQt6.QtGui import QFont
-from PyQt6.QtCore import Qt
-import sys
+from reportlab.lib.pagesizes import A3, A4, A2, landscape, portrait
+from reportlab.lib.units import mm
+import streamlit as st
 
+# ================= CONFIG =================
+PAPER_SIZES = {"A2": A2, "A3": A3, "A4": A4}
+LETTERS_FOLDER = "letters"  # thư mục chứa các ký tự PNG
 
-class PDFGenerator(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("PDF Creator - Premium Version")
-        self.setGeometry(200, 100, 950, 700)
-        self.setStyleSheet("""
-            QWidget {background-color: #20242c; color: white;}
-            QTextEdit {background-color: #2b2f38; color: #f8f8f2; border: 2px solid #444; border-radius: 10px; padding: 10px;}
-            QPushButton {
-                background-color: #0078d7; border: none; color: white;
-                padding: 10px 20px; border-radius: 8px; font-weight: bold;
-            }
-            QPushButton:hover {background-color: #005a9e;}
-            QLabel {color: #cccccc;}
-        """)
+# ================= PDF FUNCTION =================
+def generate_pdf_from_images(lines, pdf_path, paper_choice, orientation_choice, letter_height_mm, footer_text):
+    page_size = PAPER_SIZES[paper_choice]
+    page_w, page_h = landscape(page_size) if orientation_choice == "Landscape" else portrait(page_size)
+    c = canvas.Canvas(pdf_path, pagesize=(page_w, page_h))
 
-        layout = QVBoxLayout()
-        self.label = QLabel("✏️ Nhập nội dung cần in ra PDF (mỗi dòng = 1 mục):")
-        self.label.setFont(QFont("Arial", 11))
-        layout.addWidget(self.label)
+    margin_left = 20 * mm
+    margin_top = 20 * mm
+    line_spacing = 20 * mm
+    y = page_h - margin_top
+    page_number = 1
 
-        self.text_edit = QTextEdit()
-        self.text_edit.setFont(QFont("Consolas", 11))
-        layout.addWidget(self.text_edit)
+    all_lines = len(lines)
+    line_count = 0
 
-        self.button_layout = QHBoxLayout()
-        self.generate_button = QPushButton("📄 Generate PDF")
-        self.generate_button.clicked.connect(self.generate_pdf)
-        self.button_layout.addWidget(self.generate_button)
-        layout.addLayout(self.button_layout)
+    for line in lines:
+        line_count += 1
+        x = margin_left
 
-        self.setLayout(layout)
+        # Tính chiều rộng dòng
+        total_width = 0
+        for ch in line:
+            if ch == " ":
+                total_width += 10 * mm
+            else:
+                img_path = None
+                for candidate in [f"{ch.upper()}.png", f"{ch.lower()}.png"]:
+                    p = os.path.join(LETTERS_FOLDER, candidate)
+                    if os.path.exists(p):
+                        img_path = p
+                        break
+                if img_path:
+                    with Image.open(img_path) as img:
+                        w, h = img.size
+                        total_width += (letter_height_mm * mm) * (w / h)
 
-    def generate_pdf(self):
-        text = self.text_edit.toPlainText().strip()
-        if not text:
-            QMessageBox.warning(self, "Thiếu dữ liệu", "Vui lòng nhập nội dung trước khi tạo PDF.")
-            return
+        # Vẽ từng ký tự
+        for ch in line:
+            if ch == " ":
+                x += 10 * mm
+                continue
+            img_path = None
+            for candidate in [f"{ch.upper()}.png", f"{ch.lower()}.png"]:
+                p = os.path.join(LETTERS_FOLDER, candidate)
+                if os.path.exists(p):
+                    img_path = p
+                    break
+            if img_path:
+                with Image.open(img_path) as img:
+                    w, h = img.size
+                    aspect = w / h
+                    draw_h = letter_height_mm * mm
+                    draw_w = draw_h * aspect
+                    c.drawImage(img_path, x, y - draw_h, width=draw_w, height=draw_h, mask='auto')
+                    x += draw_w
 
-        # Tách dòng
-        lines = text.split("\n")
+        # Vẽ đường line giữa các dòng
+        c.setStrokeColor("#999999")
+        c.setLineWidth(0.5)
+        c.line(margin_left, y - line_spacing / 2, page_w - margin_left, y - line_spacing / 2)
 
-        # Kiểm tra độ dài từng dòng
-        long_lines = [line for line in lines if len(line) > 120]
-        if long_lines:
-            QMessageBox.warning(
-                self, "Phát hiện lỗi",
-                f"Có {len(long_lines)} dòng vượt quá 120 ký tự:\n\n" +
-                "\n".join(f"- {l[:100]}..." for l in long_lines) +
-                "\n\nHãy rút ngắn lại để tránh tràn lề."
-            )
-            return
+        # Dịch xuống dòng
+        y -= line_spacing
 
-        # Chọn nơi lưu file
-        file_path, _ = QFileDialog.getSaveFileName(self, "Lưu PDF", "", "PDF Files (*.pdf)")
-        if not file_path:
-            return
+        # Nếu hết trang
+        if y < 40 * mm:
+            c.setFont("Helvetica", 10)
+            c.drawString(30 * mm, 15 * mm, f"Page {page_number}/{math.ceil(all_lines/20)} - {paper_choice} - {footer_text}")
+            c.showPage()
+            page_number += 1
+            y = page_h - margin_top
 
-        # Tạo PDF tạm thời
-        tmp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
-        c = canvas.Canvas(tmp_pdf.name, pagesize=landscape(A3))
-        width, height = landscape(A3)
+    # Đường line ngang giữa trang
+    mid_y = page_h / 2
+    c.setStrokeColor("#666666")
+    c.setLineWidth(1)
+    c.line(0, mid_y, page_w, mid_y)
 
-        # Cấu hình lề và font
-        top_margin = 20 * mm
-        left_margin = 20 * mm
-        line_height = 10 * mm
-        usable_height = height - 40 * mm  # trừ lề trên + dưới
-        lines_per_page = math.floor(usable_height / line_height)
+    # Footer cuối
+    c.setFont("Helvetica", 10)
+    c.drawString(30 * mm, 15 * mm, f"Page {page_number}/{math.ceil(all_lines/20)} - {paper_choice} - {footer_text}")
+    c.save()
 
-        total_pages = math.ceil(len(lines) / lines_per_page)
-        c.setFont("Helvetica", 11)
+# ================= STREAMLIT UI =================
+st.set_page_config(page_title="Smart Text-to-PDF", layout="centered")
 
-        for i, line in enumerate(lines):
-            page_num = i // lines_per_page + 1
-            line_y = height - top_margin - ((i % lines_per_page) * line_height)
-            c.drawString(left_margin, line_y, line)
+st.title("🧠 Smart Text-to-PDF")
+st.write("Ứng dụng tạo PDF từ hình chữ PNG, căn dòng chuẩn kỹ thuật, có đường line và footer tự động.")
 
-            # Vẽ đường line dưới mỗi dòng
-            c.setStrokeColorRGB(0.3, 0.3, 0.3)
-            c.setLineWidth(0.3)
-            c.line(left_margin, line_y - 2, width - left_margin, line_y - 2)
+st.markdown("---")
 
-            # Khi hết trang, chuyển sang trang mới
-            if (i + 1) % lines_per_page == 0 and (i + 1) < len(lines):
-                # Thêm footer trang trước khi sang trang mới
-                footer = f"Page {page_num}/{total_pages} - A3 - NCC"
-                c.setFont("Helvetica-Oblique", 9)
-                c.drawRightString(width - left_margin, 15 * mm, footer)
-                c.showPage()
-                c.setFont("Helvetica", 11)
+text_input = st.text_area("✏️ Nhập nội dung (mỗi dòng sẽ cách nhau 20 mm):", height=200)
+paper_choice = st.selectbox("📄 Khổ giấy", list(PAPER_SIZES.keys()), index=1)
+orientation_choice = st.radio("↔️ Hướng giấy", ["Portrait", "Landscape"], horizontal=True)
+letter_height_mm = st.slider("🔠 Chiều cao ký tự (mm)", 5, 30, 10)
+footer_text = st.text_input("🏷️ Thông tin thêm (sẽ hiện ở chân trang)", "NCC")
 
-        # Footer cho trang cuối
-        footer = f"Page {total_pages}/{total_pages} - A3 - NCC"
-        c.setFont("Helvetica-Oblique", 9)
-        c.drawRightString(width - left_margin, 15 * mm, footer)
+if st.button("📄 Generate PDF"):
+    if not text_input.strip():
+        st.warning("Vui lòng nhập nội dung trước khi tạo PDF.")
+    else:
+        lines = [l.strip() for l in text_input.split("\n") if l.strip()]
+        missing = []
+        for line in lines:
+            for ch in line:
+                if ch != " ":
+                    found = any(os.path.exists(os.path.join(LETTERS_FOLDER, f"{ch.upper()}.png")) or
+                                os.path.exists(os.path.join(LETTERS_FOLDER, f"{ch.lower()}.png")) for ch in line)
+                    if not found:
+                        missing.append(ch)
+        if missing:
+            st.error(f"Các ký tự sau không có ảnh PNG: {', '.join(set(missing))}")
+        else:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmpfile:
+                generate_pdf_from_images(lines, tmpfile.name, paper_choice, orientation_choice, letter_height_mm, footer_text)
+                tmpfile.flush()
+                st.success("✅ Tạo PDF thành công!")
+                with open(tmpfile.name, "rb") as f:
+                    st.download_button("⬇️ Tải về PDF", f, file_name="output.pdf", mime="application/pdf")
 
-        c.save()
-        os.replace(tmp_pdf.name, file_path)
-
-        QMessageBox.information(self, "✅ Thành công", f"Tạo PDF hoàn tất!\nĐã lưu tại:\n{file_path}")
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    win = PDFGenerator()
-    win.show()
-    sys.exit(app.exec())
+st.markdown("---")
+st.caption("🧩 Designed by ChatGPT – Streamlit PDF Generator Pro v2")

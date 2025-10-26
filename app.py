@@ -20,55 +20,106 @@ st.set_page_config(
 )
 
 # -------------------
-# Custom CSS - Enhanced Professional Design
+# Custom CSS - Fixed
 # -------------------
 st.markdown("""
 <style>
-    /* Main background gradient */
-    .main {background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);}
+    /* Main background */
+    [data-testid="stAppViewContainer"] {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    /* Sidebar background */
+    [data-testid="stSidebar"] > div:first-child {
+        background: linear-gradient(180deg, #2c3e50 0%, #3498db 100%);
+    }
     
     /* Header styling */
-    .main-header {color: white; text-align: center; font-weight: 700; font-size: 2.5rem; 
-                  margin-bottom: 2rem; text-shadow: 0px 2px 4px rgba(0,0,0,0.3);}
+    .main-header {
+        color: white; 
+        text-align: center; 
+        font-weight: 700; 
+        font-size: 2.5rem; 
+        margin-bottom: 2rem; 
+        text-shadow: 0px 2px 4px rgba(0,0,0,0.3);
+    }
     
-    /* Card styling for content areas */
-    .content-card {background: white; border-radius: 16px; padding: 2rem; 
-                   box-shadow: 0 8px 32px rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.2);}
-    
-    /* Sidebar styling */
-    .sidebar .sidebar-content {background: linear-gradient(180deg, #2c3e50 0%, #3498db 100%); 
-                               color: white;}
+    /* Card styling */
+    .content-card {
+        background: white; 
+        border-radius: 16px; 
+        padding: 2rem; 
+        box-shadow: 0 8px 32px rgba(0,0,0,0.1); 
+        border: 1px solid rgba(255,255,255,0.2);
+    }
     
     /* Button styling */
-    .stButton>button {background: linear-gradient(45deg, #FF6B6B, #FF8E53); 
-                      color: white; border: none; border-radius: 12px; 
-                      padding: 0.75rem 2rem; font-weight: 600; font-size: 1.1rem;
-                      transition: all 0.3s ease; width: 100%;}
-    .stButton>button:hover {transform: translateY(-2px); box-shadow: 0 6px 20px rgba(255,107,107,0.4);}
+    .stButton>button {
+        background: linear-gradient(45deg, #FF6B6B, #FF8E53); 
+        color: white; 
+        border: none; 
+        border-radius: 12px; 
+        padding: 0.75rem 2rem; 
+        font-weight: 600; 
+        font-size: 1.1rem;
+        transition: all 0.3s ease; 
+        width: 100%;
+    }
+    
+    .stButton>button:hover {
+        transform: translateY(-2px); 
+        box-shadow: 0 6px 20px rgba(255,107,107,0.4);
+    }
     
     /* Text area styling */
-    .stTextArea textarea {border-radius: 12px; border: 2px solid #e0e0e0; 
-                         font-family: 'Courier New', monospace; font-size: 16px;
-                         transition: border 0.3s ease;}
-    .stTextArea textarea:focus {border-color: #667eea; box-shadow: 0 0 0 2px rgba(102,126,234,0.2);}
+    .stTextArea textarea {
+        border-radius: 12px; 
+        border: 2px solid #e0e0e0; 
+        font-family: 'Courier New', monospace; 
+        font-size: 16px;
+        transition: border 0.3s ease;
+    }
     
-    /* Select box styling */
-    .stSelectbox div[data-baseweb="select"] {border-radius: 10px;}
+    .stTextArea textarea:focus {
+        border-color: #667eea; 
+        box-shadow: 0 0 0 2px rgba(102,126,234,0.2);
+    }
     
     /* Alert styling */
-    .stAlert {border-radius: 12px; padding: 1rem; font-weight: 500; margin: 1rem 0;}
-    .alert-success {background: linear-gradient(45deg, #d4edda, #c3e6cb); color: #155724; border: none;}
-    .alert-warning {background: linear-gradient(45deg, #fff3cd, #ffeeba); color: #856404; border: none;}
-    .alert-error {background: linear-gradient(45deg, #f8d7da, #f5c6cb); color: #721c24; border: none;}
+    .stAlert {
+        border-radius: 12px; 
+        padding: 1rem; 
+        font-weight: 500; 
+        margin: 1rem 0;
+        border: none;
+    }
+    
+    /* Success alert */
+    div[data-testid="stAlert"] div:has(> div[aria-label="success"]) {
+        background: linear-gradient(45deg, #d4edda, #c3e6cb);
+        color: #155724;
+    }
+    
+    /* Warning alert */
+    div[data-testid="stAlert"] div:has(> div[aria-label="warning"]) {
+        background: linear-gradient(45deg, #fff3cd, #ffeeba);
+        color: #856404;
+    }
+    
+    /* Error alert */
+    div[data-testid="stAlert"] div:has(> div[aria-label="error"]) {
+        background: linear-gradient(45deg, #f8d7da, #f5c6cb);
+        color: #721c24;
+    }
     
     /* Missing character highlighting */
-    .missing-char {background-color: #ff6b6b; color: white; padding: 2px 4px; 
-                   border-radius: 4px; font-weight: bold;}
-    
-    /* Preview text styling */
-    .preview-text {background: #f8f9fa; border-radius: 12px; padding: 1.5rem; 
-                   border-left: 4px solid #667eea; font-family: 'Courier New', monospace;
-                   line-height: 1.6; white-space: pre-wrap;}
+    .missing-char {
+        background-color: #ff6b6b; 
+        color: white; 
+        padding: 2px 4px; 
+        border-radius: 4px; 
+        font-weight: bold;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -122,27 +173,6 @@ with st.container():
         placeholder="Enter your first line here...\nSecond line goes here...\nThird line...",
         label_visibility="collapsed"
     )
-    
-    # Preview section
-    if text_input.strip():
-        def highlight_missing_text(text):
-            highlighted_lines = []
-            lines = text.splitlines()
-            for line in lines:
-                new_line = ""
-                for ch in line:
-                    candidates = [f"{ch.upper()}.png", f"{ch.lower()}.png"]
-                    if ch != " " and not any(os.path.exists(os.path.join(LETTERS_FOLDER, c)) for c in candidates):
-                        new_line += f'<span class="missing-char">{ch}</span>'
-                    else:
-                        new_line += ch
-                highlighted_lines.append(new_line)
-            return "<br>".join(highlighted_lines)
-        
-        highlighted_text = highlight_missing_text(text_input)
-        st.markdown("### 👁️ Preview")
-        st.markdown(f"<div class='preview-text'>{highlighted_text}</div>", unsafe_allow_html=True)
-    
     st.markdown("</div>", unsafe_allow_html=True)
 
 # -------------------
@@ -158,8 +188,11 @@ def get_missing_chars(lines):
                     missing_chars.add(ch)
     return missing_chars
 
-def check_line_width(line, page_w, margin_x=20*mm, space_width=15*mm, letter_height=100*mm):
+def check_line_width(line, page_w, letter_height_mm, margin_x=20*mm, space_width=15*mm):
+    """Check if a line is too wide for the page"""
     x = margin_x
+    letter_height = letter_height_mm * mm
+    
     for ch in line:
         if ch == " ":
             x += space_width
@@ -175,7 +208,23 @@ def check_line_width(line, page_w, margin_x=20*mm, space_width=15*mm, letter_hei
                 x += 50*mm
         else:
             x += 50*mm
+    
     return x > (page_w - margin_x)
+
+def get_too_long_lines(lines, letter_height_mm):
+    """Get list of line numbers that are too long"""
+    page_size = PAPER_SIZES[paper_choice]
+    if orientation_choice == "Landscape":
+        page_w, _ = landscape(page_size)
+    else:
+        page_w, _ = portrait(page_size)
+    
+    too_long_lines = []
+    for i, line in enumerate(lines):
+        if check_line_width(line, page_w, letter_height_mm):
+            too_long_lines.append(i + 1)  # +1 để hiển thị số dòng bắt đầu từ 1
+    
+    return too_long_lines
 
 def generate_pdf(lines, pdf_path, letter_height_mm):
     page_size = PAPER_SIZES[paper_choice]
@@ -245,61 +294,56 @@ def generate_pdf(lines, pdf_path, letter_height_mm):
 # -------------------
 col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
-    if st.button("📥 Download PDF", key="download_pdf"):
+    if st.button("📥 Download PDF", key="download_pdf", use_container_width=True):
         lines = [line.strip() for line in text_input.splitlines() if line.strip()]
         
         if not lines:
-            st.markdown(
-                '<div class="stAlert alert-warning">⚠️ Please enter at least one line of text.</div>', 
-                unsafe_allow_html=True
-            )
+            st.error("⚠️ Please enter at least one line of text.")
         else:
+            # Check for missing characters
             missing_chars = get_missing_chars(lines)
-            long_lines = [i+1 for i, line in enumerate(lines) if check_line_width(
-                line, PAPER_SIZES[paper_choice][0], letter_height=letter_height_mm*mm)]
+            
+            # Check for lines that are too long
+            too_long_lines = get_too_long_lines(lines, letter_height_mm)
+            
+            errors = []
             
             if missing_chars:
-                st.markdown(
-                    f'<div class="stAlert alert-error">❌ Missing PNG letters: {", ".join(sorted(missing_chars))}</div>', 
-                    unsafe_allow_html=True
-                )
+                errors.append(f"❌ Missing PNG letters: {', '.join(sorted(missing_chars))}")
             
-            if long_lines:
-                st.markdown(
-                    f'<div class="stAlert alert-warning">⚠️ Lines too long for selected paper size: {long_lines}</div>', 
-                    unsafe_allow_html=True
-                )
+            if too_long_lines:
+                errors.append(f"❌ Lines too long for selected paper size: {', '.join(map(str, too_long_lines))}")
             
-            if not missing_chars and not long_lines:
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
-                    tmp_path = tmp_pdf.name
+            if errors:
+                for error in errors:
+                    st.error(error)
+                st.stop()  # Stop execution if there are errors
+            
+            # Generate PDF if no errors
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
+                tmp_path = tmp_pdf.name
+            
+            try:
+                generate_pdf(lines, tmp_path, letter_height_mm)
                 
-                try:
-                    generate_pdf(lines, tmp_path, letter_height_mm)
-                    
-                    with open(tmp_path, "rb") as f:
-                        pdf_data = f.read()
-                    
-                    st.markdown(
-                        '<div class="stAlert alert-success">✅ PDF generated successfully! Ready for download.</div>', 
-                        unsafe_allow_html=True
-                    )
-                    
-                    # Auto download
-                    st.download_button(
-                        label="💾 Save PDF File",
-                        data=pdf_data,
-                        file_name="document.pdf",
-                        mime="application/pdf",
-                        key="final-download"
-                    )
-                    
-                except Exception as e:
-                    st.markdown(
-                        f'<div class="stAlert alert-error">❌ Error generating PDF: {str(e)}</div>', 
-                        unsafe_allow_html=True
-                    )
-                finally:
-                    # Clean up temporary file
-                    if os.path.exists(tmp_path):
-                        os.unlink(tmp_path)
+                with open(tmp_path, "rb") as f:
+                    pdf_data = f.read()
+                
+                st.success("✅ PDF generated successfully! Click below to download.")
+                
+                # Download button
+                st.download_button(
+                    label="💾 Save PDF File",
+                    data=pdf_data,
+                    file_name="document.pdf",
+                    mime="application/pdf",
+                    key="final-download",
+                    use_container_width=True
+                )
+                
+            except Exception as e:
+                st.error(f"❌ Error generating PDF: {str(e)}")
+            finally:
+                # Clean up temporary file
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)

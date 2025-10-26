@@ -1,48 +1,52 @@
 import os
 import streamlit as st
 from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A3, landscape, portrait
+from reportlab.lib.pagesizes import A1, A2, A3, A4, landscape, portrait
 from reportlab.lib.units import mm
 from PIL import Image
 import tempfile
-import shutil
 import streamlit.components.v1 as components
 
 # -------------------
 # Config
 # -------------------
-PAPER_SIZE = A3
+PAPER_SIZES = {"A1": A1, "A2": A2, "A3": A3, "A4": A4}
+DEFAULT_PAPER = "A3"
 DEFAULT_ORIENTATION = "Landscape"
 DEFAULT_LETTER_HEIGHT = 100  # mm
 LETTERS_FOLDER = os.path.join(os.path.dirname(__file__), "ABC")
 
-# Ensure folder exists
 if not os.path.exists(LETTERS_FOLDER):
     os.makedirs(LETTERS_FOLDER)
+
+ADMIN_PASSWORD = "admin123"  # bạn đổi mật khẩu ở đây
 
 # -------------------
 # Sidebar / Controls
 # -------------------
 st.sidebar.title("Settings")
+paper_choice = st.sidebar.selectbox("Paper size", list(PAPER_SIZES.keys()), index=list(PAPER_SIZES.keys()).index(DEFAULT_PAPER))
 orientation_choice = st.sidebar.selectbox("Orientation", ["Portrait", "Landscape"], index=1)
-letter_height_mm = st.sidebar.selectbox(
-    "Letter height (mm)", [50, 75, 100, 150], index=2
-)
+letter_height_mm = st.sidebar.selectbox("Letter height (mm)", [50, 75, 100, 150], index=2)
 letter_height = letter_height_mm * mm
 
 # -------------------
-# Admin: Upload letters
+# Admin: Upload PNG letters
 # -------------------
 st.sidebar.subheader("Admin: Upload PNG letters")
-uploaded_files = st.sidebar.file_uploader(
-    "Upload PNG letters", type=["png", "PNG"], accept_multiple_files=True
-)
-if uploaded_files:
-    for file in uploaded_files:
-        save_path = os.path.join(LETTERS_FOLDER, file.name)
-        with open(save_path, "wb") as f:
-            f.write(file.getbuffer())
-    st.sidebar.success(f"Uploaded {len(uploaded_files)} files.")
+admin_input = st.sidebar.text_input("Enter admin password", type="password")
+if admin_input == ADMIN_PASSWORD:
+    uploaded_files = st.sidebar.file_uploader(
+        "Upload PNG letters", type=["png", "PNG"], accept_multiple_files=True
+    )
+    if uploaded_files:
+        for file in uploaded_files:
+            save_path = os.path.join(LETTERS_FOLDER, file.name)
+            with open(save_path, "wb") as f:
+                f.write(file.getbuffer())
+        st.sidebar.success(f"Uploaded {len(uploaded_files)} files.")
+elif admin_input:
+    st.sidebar.error("Incorrect password!")
 
 # -------------------
 # Text input
@@ -56,7 +60,6 @@ text_input = st.text_area(
 # Helper functions
 # -------------------
 def find_letter_file(ch):
-    """Find letter PNG ignoring case and extension"""
     ch = ch.upper()
     for fname in os.listdir(LETTERS_FOLDER):
         name, ext = os.path.splitext(fname)
@@ -90,10 +93,11 @@ def check_line_width(line, page_w, margin_x=20*mm, space_width=15*mm):
     return x > (page_w - margin_x)
 
 def generate_pdf(lines, pdf_path):
+    page_size = PAPER_SIZES[paper_choice]
     if orientation_choice == "Landscape":
-        page_w, page_h = landscape(PAPER_SIZE)
+        page_w, page_h = landscape(page_size)
     else:
-        page_w, page_h = portrait(PAPER_SIZE)
+        page_w, page_h = portrait(page_size)
 
     c = canvas.Canvas(pdf_path, pagesize=(page_w, page_h))
     margin_x = 20*mm
@@ -142,7 +146,7 @@ def generate_pdf(lines, pdf_path):
 
         # Footer
         c.setFont("Helvetica", 10)
-        footer_text = f"Page {page_num}/{total_pages} - A3 - NCC"
+        footer_text = f"Page {page_num}/{total_pages} - {paper_choice} - NCC"
         c.drawCentredString(page_w/2, 5*mm, footer_text)
 
         current_y -= (letter_height + line_spacing)
@@ -168,11 +172,11 @@ if st.button("Generate PDF"):
         generate_pdf(lines, tmp_path)
         st.success("PDF generated!")
 
-        # Preview PDF using PDF.js
-        viewer_path = "https://mozilla.github.io/pdf.js/web/viewer.html"
-        pdf_url = tmp_path.replace("\\","/")  # normalize path
+        # Preview PDF bằng PDF.js
+        pdf_js_viewer = "https://mozilla.github.io/pdf.js/web/viewer.html"
+        pdf_file_url = tmp_path.replace("\\","/")
         iframe_code = f"""
-        <iframe src="{viewer_path}?file={pdf_url}" width="100%" height="700" style="border:none;"></iframe>
+        <iframe src="{pdf_js_viewer}?file=file:///{pdf_file_url}" width="100%" height="700" style="border:none;"></iframe>
         """
         components.html(iframe_code, height=700)
 

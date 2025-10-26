@@ -1,12 +1,13 @@
 import os
 import tempfile
-import platform
 from pathlib import Path
 from PIL import Image
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A1, A2, A3, A4, landscape, portrait
 from reportlab.lib.units import mm
 import streamlit as st
+import sys
+import subprocess
 
 # -------------------------
 # Config
@@ -121,6 +122,11 @@ def generate_pdf(lines, pdf_path):
             current_y = page_h - margin_y - letter_height
             page_num +=1
 
+        # Red border 5mm
+        c.setStrokeColorRGB(1,0,0)
+        c.setLineWidth(2)
+        c.rect(5*mm, 5*mm, page_w-10*mm, page_h-10*mm)
+
         # Draw letters
         x = margin_x
         for ch in line.upper():
@@ -136,17 +142,23 @@ def generate_pdf(lines, pdf_path):
             else:
                 x += 50*mm
 
+        # Footer
+        c.setFont("Helvetica", 10)
+        footer_text = f"Page {page_num} - {paper_choice} - NCC"
+        c.drawCentredString(page_w/2, 5*mm, footer_text)
+
         current_y -= (letter_height + line_spacing)
 
     c.save()
 
-def open_pdf(pdf_path):
-    if platform.system() == "Windows":
-        os.startfile(pdf_path)
-    elif platform.system() == "Darwin":
-        os.system(f"open {pdf_path}")
-    else:
-        os.system(f"xdg-open {pdf_path}")
+def open_pdf(path):
+    """Mở PDF bằng chương trình mặc định trên máy"""
+    if sys.platform.startswith("win"):
+        os.startfile(path)
+    elif sys.platform.startswith("darwin"):
+        subprocess.call(["open", path])
+    else:  # Linux
+        subprocess.call(["xdg-open", path])
 
 # -------------------------
 # Generate PDF
@@ -174,11 +186,9 @@ if st.button("Generate PDF"):
         tmp_pdf.close()
 
         generate_pdf(lines, tmp_path)
-        st.success(f"PDF generated at {tmp_path}!")
+        st.success(f"PDF generated! Opening file...")
 
-        # Open PDF in default viewer
+        # Mở PDF bằng chương trình mặc định
         open_pdf(tmp_path)
 
-        # Download button
-        with open(tmp_path, "rb") as f:
-            st.download_button("Download PDF", f, file_name="output.pdf")
+        st.info(f"PDF saved to temp: {tmp_path}")
